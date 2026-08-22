@@ -1,0 +1,9 @@
+| Metric | Value |
+|--------|-------|
+| Test images | 85 (identical ×25 + color-shift ×25 + crop ×25 + unique ×10) |
+| dHash compute speed | 8,917 images/sec (100 iterations) |
+| SimHash compute speed | 1,663 images/sec (20 iterations) |
+| dHash HD identical (expected ≤5) | see detailed above |
+| dHash FP rate on unique images | 17.8% |
+| SimHash ≥0.95 pass rate | see detailed above |
+| SimHash FP rate on unique | see detailed above |

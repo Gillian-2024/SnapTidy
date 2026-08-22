@@ -1,0 +1,6 @@
+*.png
+*.jpg
+test_images/
+models/
+results/
+__pycache__/
