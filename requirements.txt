@@ -1,0 +1,6 @@
+# SnapTidy V1 — Production Dependencies
+Pillow>=10.0
+numpy>=1.24
+torch>=2.0
+openai-clip>=1.0
+hdbscan>=0.8

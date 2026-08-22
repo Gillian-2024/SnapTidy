@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SnapTidy — 审核界面</title>
+<style>
+/* ===== Tokens ===== */
+:root {
+  --bg: #fafafa; --surface: #ffffff; --border: #e2e2e2;
+  --text: #1a1a1a; --text-muted: #6b7280;
+  --keep-bg: #d1fae5; --keep-border: #6ee7b7; --keep-text: #065f46;
+  --archive-bg: #fee2e2; --archive-border: #fca5a5; --archive-text: #991b1b;
+  --pending-bg: #fffbeb; --pending-border: #fcd34d; --pending-text: #92400e;
+  --radius: 8px; --shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111; --surface: #1c1c1c; --border: #333;
+  --text: #e5e5e5; --text-muted: #9ca3af;
+  --keep-bg: #064e3b; --keep-border: #059669; --keep-text: #a7f3d0;
+  --archive-bg: #7f1d1d; --archive-border: #dc2626; --archive-text: #fca5a5;
+  --pending-bg: #78350f; --pending-border: #d97706; --pending-text: #fde68a;
+}}
+[data-theme="dark"] {
+  --bg: #111; --surface: #1c1c1c; --border: #333;
+  --text: #e5e5e5; --text-muted: #9ca3af;
+  --keep-bg: #064e3b; --keep-border: #059669; --keep-text: #a7f3d0;
+  --archive-bg: #7f1d1d; --archive-border: #dc2626; --archive-text: #fca5a5;
+  --pending-bg: #78350f; --pending-border: #d97706; --pending-text: #fde68a;
+}
+
+/* ===== Reset & base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding: 16px; }
+button { cursor: pointer; font-size: .85em; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+button:hover { opacity: .85; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+select, input[type=range] { font-size: .85em; }
+
+/* ===== Upload overlay ===== */
+#upload-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); }
+#upload-overlay.hidden { display: none; }
+#upload-box { background: var(--surface); border: 2px dashed var(--border); border-radius: 12px; padding: 48px 64px; text-align: center; cursor: pointer; transition: border-color .2s; }
+#upload-box:hover { border-color: var(--keep-border); }
+#upload-box p { color: var(--text-muted); margin-top: 8px; }
+#upload-box h2 { font-weight: 600; }
+
+/* ===== Header / Summary ===== */
+header { max-width: 1200px; margin: 0 auto 16px; }
+h1 { font-size: 1.4em; margin-bottom: 4px; }
+.summary-bar { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 16px; min-width: 100px; text-align: center; }
+.stat .num { font-size: 1.5em; font-weight: 700; }
+.stat .label { font-size: .75em; color: var(--text-muted); }
+.stat.keep .num { color: var(--keep-border); }
+.stat.archive .num { color: var(--archive-border); }
+.stat.pending .num { color: var(--pending-border); }
+
+/* ===== Filter bar ===== */
+.filter-bar { max-width: 1200px; margin: 0 auto 16px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.filter-bar label { font-size: .8em; color: var(--text-muted); }
+.filter-bar .control { display: flex; flex-direction: column; gap: 2px; }
+.quality-val { font-size: .8em; min-width: 2em; text-align: center; }
+
+/* ===== Groups grid ===== */
+main { max-width: 1200px; margin: 0 auto; columns: 360px; column-gap: 16px; }
+
+.group-card { break-inside: avoid; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; box-shadow: var(--shadow); }
+.card-header { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.card-header .group-label { font-weight: 600; font-size: .9em; }
+.card-header .group-meta { font-size: .75em; color: var(--text-muted); }
+.card-body { padding: 10px 12px; }
+
+/* Photo thumbnails */
+.thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.thumb { position: relative; aspect-ratio: 1/1; border-radius: 4px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: #ccc; display: flex; align-items: center; justify-content: center; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb .score-badge { position: absolute; top: 2px; right: 2px; font-size: .6em; padding: 1px 4px; border-radius: 3px; background: rgba(0,0,0,.6); color: #fff; }
+.thumb.selected-keep { border-color: var(--keep-border); }
+.thumb.selected-archive { border-color: var(--archive-border); }
+
+.thumb-actions { display: flex; gap: 4px; margin-top: 4px; }
+.thumb-actions button { flex: 1; font-size: .7em; padding: 2px 4px; }
+.thumb-actions button.btn-keep { background: var(--keep-bg); color: var(--keep-text); border-color: var(--keep-border); }
+.thumb-actions button.btn-archive { background: var(--archive-bg); color: var(--archive-text); border-color: var(--archive-border); }
+.thumb-actions button.btn-pending { background: var(--pending-bg); color: var(--pending-text); border-color: var(--pending-border); }
+
+.group-actions { padding: 8px 12px; border-top: 1px solid var(--border); display: flex; gap: 6px; }
+.group-actions button { font-size: .75em; }
+.group-actions .btn-group-keep { background: var(--keep-bg); color: var(--keep-text); border-color: var(--keep-border); }
+.group-actions .btn-group-archive { background: var(--archive-bg); color: var(--archive-text); border-color: var(--archive-border); }
+
+/* ===== No groups message ===== */
+.no-groups { text-align: center; color: var(--text-muted); padding: 48px; font-size: 1.1em; }
+
+/* ===== Export bar ===== */
+.export-bar { max-width: 1200px; margin: 24px auto; text-align: center; padding: 16px; }
+.export-bar button { font-size: 1em; padding: 10px 32px; background: var(--keep-bg); color: var(--keep-text); border-color: var(--keep-border); font-weight: 600; }
+
+/* ===== Theme toggle ===== */
+.theme-toggle { position: fixed; top: 8px; right: 8px; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 1.1em; }
+
+/* ===== Responsive ===== */
+@media (max-width: 900px) { main { columns: 280px; } }
+@media (max-width: 600px) { main { columns: 1fr; } .summary-bar { gap: 8px; } .stat { min-width: 70px; padding: 6px 10px; } }
+</style>
+</head>
+<body>
+
+<!-- Upload overlay -->
+<div id="upload-overlay">
+  <div id="upload-box" onclick="document.getElementById('file-input').click(); this.querySelector('p').textContent='加载中…'">
+    <h2>📸 SnapTidy 审核</h2>
+    <p>选择 pipeline 产出的 JSON 报告文件</p>
+    <input type="file" id="file-input" accept=".json" style="display:none" onchange="handleFile(event)">
+  </div>
+</div>
+
+<!-- Theme toggle -->
+<button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark/light">🌓</button>
+
+<!-- App -->
+<header id="app-header" style="display:none">
+  <h1>SnapTidy — 审核界面</h1>
+  <div class="summary-bar" id="summary-bar"></div>
+</header>
+
+<!-- Filter bar -->
+<div class="filter-bar" id="filter-bar" style="display:none">
+  <div class="control">
+    <label>质量阈值</label>
+    <input type="range" id="quality-slider" min="0" max="100" value="60" oninput="onThresholdChange()">
+  </div>
+  <span class="quality-val" id="quality-val">60</span>
+  <div class="control">
+    <label>视觉分组筛选</label>
+    <select id="visual-filter" onchange="renderGroups()">
+      <option value="all">所有簇</option>
+    </select>
+  </div>
+</div>
+
+<main id="groups-container"></main>
+
+<div class="export-bar" id="export-bar" style="display:none">
+  <button onclick="exportResult()">📤 导出精选列表</button>
+</div>
+
+<script>
+// ===== State =====
+let DATA = null;
+let ACTIONS = {}; // { photo_path: "keep" | "archive" | "pending" }
+
+// ===== File loading =====
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      DATA = JSON.parse(ev.target.result);
+      initActions();
+      renderAll();
+      document.getElementById('upload-overlay').classList.add('hidden');
+      document.getElementById('app-header').style.display = '';
+      document.getElementById('filter-bar').style.display = '';
+      document.getElementById('export-bar').style.display = '';
+    } catch(err) {
+      alert('JSON 解析失败: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function initActions() {
+  ACTIONS = {};
+  for (const g of DATA.groups) {
+    for (const p of g.photos) {
+      ACTIONS[p.path] = p.action || "pending";
+    }
+  }
+  // Also track dedup_removed
+  for (const p of DATA.dedup_removed || []) {
+    if (!ACTIONS[p.path]) ACTIONS[p.path] = "archived_dedup";
+  }
+}
+
+// ===== Theme =====
+function toggleTheme() {
+  const root = document.documentElement;
+  const current = root.getAttribute('data-theme');
+  root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+}
+
+// ===== Render summary =====
+function renderSummary() {
+  const s = DATA.summary || { keep: 0, archive: 0, pending: 0 };
+  const keptDedup = (DATA.dedup_removed || []).length;
+  const totalSpace = calcSavedSpace();
+  document.getElementById('summary-bar').innerHTML = `
+    <div class="stat keep"><div class="num">${s.keep}</div><div class="label">保留</div></div>
+    <div class="stat archive"><div class="num">${s.archive}</div><div class="label">归档</div></div>
+    <div class="stat pending"><div class="num">${s.pending}</div><div class="label">待审</div></div>
+    <div class="stat"><div class="num">${keptDedup}</div><div class="label">去重剔除</div></div>
+    <div class="stat"><div class="num">${totalSpace > 1048576 ? (totalSpace/1048576).toFixed(1)+'MB' : (totalSpace/1024).toFixed(0)+'KB'}</div><div class="label">去重节省</div></div>
+  `;
+}
+
+function calcSavedSpace() {
+  let sum = 0;
+  for (const p of DATA.dedup_removed || []) sum += p.file_size || 0;
+  return sum;
+}
+
+// ===== Filters =====
+function onThresholdChange() {
+  const v = parseInt(document.getElementById('quality-slider').value);
+  document.getElementById('quality-val').textContent = v;
+  applyThreshold(v);
+  updateGroupButtons();
+}
+
+function applyThreshold(threshold) {
+  // Apply quality-based actions, preserve user overrides
+  for (const g of DATA.groups) {
+    for (const p of g.photos) {
+      const existing = ACTIONS[p.path];
+      // Only auto-update non-user-changed actions
+      const wasAutoSet = existing !== "pending" || true; // all are currently auto-set
+      // Re-evaluate based on pipeline defaults
+      if (p.position_in_group <= 1 && p.quality_score >= threshold) {
+        ACTIONS[p.path] = "keep";
+      } else if (p.quality_score < threshold) {
+        ACTIONS[p.path] = "archive";
+      } else {
+        ACTIONS[p.path] = "pending";
+      }
+    }
+  }
+}
+
+// ===== Populated visual filter options =====
+function populateVisualFilter() {
+  const sel = document.getElementById('visual-filter');
+  sel.innerHTML = '<option value="all">所有簇</option>';
+  const labels = new Map();
+  for (const g of DATA.groups) {
+    const v = g.dimensions?.visual || "?";
+    const cid = g.cluster_id;
+    if (!labels.has(cid)) labels.set(cid, v);
+  }
+  for (const [cid, v] of labels) {
+    const opt = document.createElement('option');
+    opt.value = cid;
+    opt.textContent = `视觉簇 ${cid} (${v})`;
+    sel.appendChild(opt);
+  }
+}
+
+function getFilteredGroups() {
+  const val = document.getElementById('visual-filter').value;
+  if (val === 'all') return DATA.groups;
+  return DATA.groups.filter(g => g.cluster_id == val);
+}
+
+// ===== Render cards =====
+function renderGroups() {
+  const container = document.getElementById('groups-container');
+  const groups = getFilteredGroups();
+
+  if (groups.length === 0) {
+    container.innerHTML = '<div class="no-groups">没有匹配的分组</div>';
+    return;
+  }
+
+  container.innerHTML = groups.map(g => renderCard(g)).join('');
+}
+
+function renderCard(g) {
+  const thumbs = g.photos.map(p => renderThumb(p, g)).join('\n');
+  const bestPreview = g.photos.length > 0 ? `<img src="${g.photos[0].path}" alt="${g.photos[0].filename}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;margin-bottom:8px;background:#ccc;">` : '';
+
+  return `
+    <div class="group-card">
+      <div class="card-header">
+        <div>
+          <div class="group-label">${escHtml(g.label)}</div>
+          <div class="group-meta">${g.size} 张照片 · Cluster ${g.cluster_id}</div>
+        </div>
+      </div>
+      <div class="card-body">
+        ${bestPreview}
+        <div class="thumb-grid">${thumbs}</div>
+      </div>
+      <div class="group-actions">
+        <button class="btn-group-keep" onclick="setGroupAction('${g.key}', 'keep')">✓ 全部保留</button>
+        <button class="btn-group-archive" onclick="setGroupAction('${g.key}', 'archive')">🗑 全部归档</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderThumb(p, g) {
+  const isSelected = ACTIONS[p.path];
+  const cls = isSelected === 'keep' ? 'selected-keep' : isSelected === 'archive' ? 'selected-archive' : '';
+  return `
+    <div>
+      <div class="thumb ${cls}" onclick="openDetail('${g.key}', '${escAttr(p.path)}')">
+        <img src="${p.path}" alt="${escHtml(p.filename)}">
+        <span class="score-badge">${Math.round(p.quality_score)}</span>
+      </div>
+      <div class="thumb-actions">
+        <button class="btn-keep" onclick="actionPhoto('${p.path}', 'keep')">保留</button>
+        <button class="btn-archive" onclick="actionPhoto('${p.path}', 'archive')">归档</button>
+        <button class="btn-pending" onclick="actionPhoto('${p.path}', 'pending')">待审</button>
+      </div>
+    </div>
+  `;
+}
+
+// ===== Actions =====
+function actionPhoto(path, action) {
+  ACTIONS[path] = action;
+  reRenderCurrentView();
+}
+
+function setGroupAction(key, action) {
+  for (const g of DATA.groups) {
+    if (g.id === key) {
+      for (const p of g.photos) {
+        ACTIONS[p.path] = action;
+      }
+    }
+  }
+  reRenderCurrentView();
+}
+
+function reRenderCurrentView() {
+  renderSummary();
+  renderGroups();
+}
+
+// ===== Detail view (simple prompt for now) =====
+function openDetail(groupKey, path) {
+  // Simple: show file info in a small overlay
+  const rec = findRecord(path);
+  if (!rec) return;
+  const info = `文件名：${rec.filename}\n大小：${(rec.file_size / 1024).toFixed(1)} KB\n${rec.width}×${rec.height} ${rec.format}\n日期：${rec.capture_date || '无'}\n质量分：${rec.quality_score}`;
+  alert(info);
+}
+
+function findRecord(path) {
+  for (const g of DATA.groups) {
+    for (const p of g.photos) {
+      if (p.path === path) return p;
+    }
+  }
+  return null;
+}
+
+// ===== Export =====
+function exportResult() {
+  const result = {
+    exported_at: new Date().toISOString(),
+    source_dir: DATA.source_dir,
+    actions: { keep: [], archive: [], pending: [] },
+    dedup_summary: {
+      kept: [],
+      removed: (DATA.dedup_removed || []).map(p => p.path)
+    }
+  };
+  for (const g of DATA.groups) {
+    for (const p of g.photos) {
+      const a = ACTIONS[p.path] || "pending";
+      if (result.actions[a]) result.actions[a].push({ path: p.path, quality: p.quality_score, filename: p.filename });
+    }
+  }
+  // Add keepers from dedup groups
+  const keeperPaths = new Set();
+  for (const d of DATA.dedup_removed || []) {
+    if (d.duplicate_of) keeperPaths.add(d.duplicate_of);
+  }
+  for (const g of DATA.groups) {
+    for (const p of g.photos) {
+      if (keeperPaths.has(p.path) && !result.dedup_summary.kept.includes(p.path)) {
+        result.dedup_summary.kept.push({ path: p.path, quality: p.quality_score, filename: p.filename });
+      }
+    }
+  }
+
+  const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'snaptidy_selection_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ===== Helpers =====
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+// ===== Init =====
+renderAll = function() {
+  renderSummary();
+  populateVisualFilter();
+  renderGroups();
+};
+</script>
+</body>
+</html>

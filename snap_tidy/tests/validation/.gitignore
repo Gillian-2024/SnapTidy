@@ -1,0 +1,20 @@
+# Test artifacts — never commit
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tiff
+test_images/
+results/
+outputs/
+*.mlpackage
+*.pt
+*.pth
+*.onnx
+__pycache__/
+*.egg-info/
+venv/
+.venv/
+env/
+.env/
+*.log

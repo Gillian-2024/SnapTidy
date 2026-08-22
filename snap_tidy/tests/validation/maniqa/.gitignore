@@ -1,0 +1,6 @@
+*.png
+*.jpg
+test_images/
+weights/
+results/
+__pycache__/

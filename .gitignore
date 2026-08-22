@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual env
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SnapTidy specific
+snap_tidy/tests/validation/hdbscan/test_hdbscan_images/*.jpg
+snap_tidy/tests/validation/hdbscan/test_hdbscan_images/*.jpeg
