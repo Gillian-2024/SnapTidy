@@ -31,3 +31,10 @@ memory/
 # Swift / SwiftPM build artifacts
 .build/
 .swiftpm/
+
+# 密钥与隐私（.env.example 是公开模板，保留可提交）
+.env
+.env.*
+!.env.example
+*.pem
+*.key
