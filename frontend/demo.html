@@ -1,0 +1,543 @@
+<meta charset="UTF-8">
+<title>SnapTidy 抽卡 Demo</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { background:#e9e6e0; font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px 12px; }
+  .wrap { display:flex; flex-direction:column; align-items:center; gap:16px; }
+  .hint { font-size:12px; color:#8a8478; text-align:center; }
+
+  .phone { width:402px; height:874px; background:#000; border:3px solid #0a0a0a; border-radius:52px; box-shadow:0 24px 52px rgba(0,0,0,.24); position:relative; overflow:hidden; }
+  .screen { width:100%; height:100%; overflow:hidden; background:#fff; }
+  /* 系统层：状态栏 + 灵动岛（所有屏共享，永远在顶层） */
+  .statusbar { position:absolute; top:0; left:0; right:0; height:54px; display:flex; justify-content:space-between; align-items:center; padding:0 30px; z-index:20; pointer-events:none; color:#111; font-size:15px; font-weight:700; }
+  .sb-right { display:flex; gap:7px; align-items:center; font-size:12px; font-weight:600; }
+  .island { position:absolute; top:11px; left:50%; transform:translateX(-50%); width:112px; height:31px; background:#0a0a0a; border-radius:16px; z-index:30; pointer-events:none; }
+  .homebar { position:absolute; bottom:7px; left:50%; transform:translateX(-50%); width:120px; height:5px; border-radius:3px; background:rgba(30,30,30,.38); pointer-events:none; z-index:30; }
+
+  /* ---------- 屏 A：iOS 桌面（小组件入口，非全屏） ---------- */
+  #screenA { position:absolute; inset:0; }
+  .desk { position:absolute; inset:0; background:linear-gradient(165deg,#dce7f6 0%,#eee4f7 45%,#fbe7df 100%); }
+  .grid { position:relative; display:grid; grid-template-columns:repeat(4,62px); justify-content:center; gap:26px 34px; padding-top:78px; }
+  .widget { grid-column:span 2; grid-row:span 2; background:#fff; border-radius:20px; box-shadow:0 6px 18px rgba(0,0,0,.14); padding:12px; position:relative; cursor:pointer; display:flex; flex-direction:column; transition:transform .12s ease; }
+  .widget:hover { transform:translateY(-2px); }
+  .widget:active { transform:scale(.98); }
+  .widget .reddot { position:absolute; top:7px; right:7px; background:#e53935; color:#fff; font-size:10px; font-weight:800; border-radius:9px; padding:1px 6px; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+  .w-title { font-size:12px; font-weight:700; color:#222; margin-bottom:7px; }
+  .w-mosaic { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; flex:1; margin-bottom:7px; }
+  .w-mosaic .tile { border-radius:5px; background:#eee; }
+  .w-cta { text-align:center; font-size:11px; font-weight:700; color:#fff; background:#1a1a1a; border-radius:8px; padding:6px 0; }
+  .w-stats { font-size:8.5px; color:#8a8478; text-align:center; margin-top:6px; }
+  .app { width:62px; text-align:center; }
+  .app .ic { width:62px; height:62px; border-radius:15px; background:rgba(255,255,255,.92); display:flex; align-items:center; justify-content:center; font-size:28px; box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .app .lb { font-size:11px; color:#333; margin-top:5px; font-weight:600; }
+  .dock { position:absolute; bottom:26px; left:16px; right:16px; display:flex; justify-content:space-around; align-items:center; padding:13px 10px; background:rgba(255,255,255,.62); backdrop-filter:blur(22px); border-radius:26px; box-shadow:0 2px 10px rgba(0,0,0,.10); }
+  .dock .app .lb { font-size:10.5px; color:#222; }
+
+  /* ---------- 屏 B：抽卡 ---------- */
+  #screenB { display:none; padding:58px 8px 8px; }
+  .card-top { text-align:center; margin-bottom:24px; }
+  .ding { font-size:22px; font-weight:900; color:#111; letter-spacing:3px; }
+  .ding-sub { font-size:11px; color:#8a8478; margin-top:4px; }
+  .rarity { height:12px; border-radius:6px; margin:12px 0 22px; position:relative; }
+  .rarity .rlabel { position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:10px; font-weight:800; letter-spacing:1px; }
+  .preview { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:18px; }
+  .pcard { border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 1px 5px rgba(0,0,0,.08); border:1.5px solid #e4e0d8; position:relative; animation:pullIn .3s ease backwards; }
+  .pcard .ph { height:118px; display:flex; align-items:center; justify-content:center; font-size:32px; position:relative; }
+  .pcard .besttag { position:absolute; top:5px; left:5px; background:#7c4dff; color:#fff; font-size:9px; font-weight:800; border-radius:4px; padding:2px 5px; }
+  .pcard .num { position:absolute; bottom:5px; right:5px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.5); font-size:11px; font-weight:800; }
+  .pmeta { display:flex; justify-content:space-between; padding:5px 7px; font-size:10px; color:#8a8478; font-variant-numeric:tabular-nums; }
+  .pmeta .sz { color:#3a3a3a; font-weight:600; }
+  .pcard .issue { font-size:9.5px; color:#c0392b; margin-left:6px; }
+  .suggestion { font-size:13px; color:#333; background:#f3eefe; border:1px solid #cdb8f5; border-radius:10px; padding:12px 14px; margin-bottom:18px; line-height:1.6; }
+  .buttons { display:flex; gap:10px; margin-bottom:18px; }
+  .btn { flex:1; padding:13px 0; border-radius:11px; font-size:14px; font-weight:800; text-align:center; cursor:pointer; transition:transform .1s ease, opacity .1s ease; }
+  .btn:active { transform:scale(.97); }
+  .btn-yes { background:#1a1a1a; color:#fff; }
+  .btn-skip { border:1.5px solid #b8b2a6; color:#4a443a; background:#fff; }
+  .stats { display:flex; justify-content:space-between; font-size:12px; color:#6b6458; border-top:1px dashed #d8d2c6; padding-top:13px; }
+  .stats b { color:#222; font-variant-numeric:tabular-nums; }
+  @keyframes pullIn { from { opacity:0; transform:translateY(8px) scale(.95); } to { opacity:1; transform:none; } }
+
+  /* ---------- 屏 C：结算 ---------- */
+  #screenC { display:none; padding:58px 8px 8px; }
+  .result { text-align:center; padding:56px 8px 6px; }
+  .result-emoji { font-size:52px; margin-bottom:14px; animation:pop .35s ease; }
+  .result-title { font-size:22px; font-weight:900; color:#111; margin-bottom:10px; }
+  .result-sub { font-size:13px; color:#6b6458; margin-bottom:26px; line-height:1.7; }
+  .stat-box { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; border:1px solid #e0dcd2; border-radius:12px; padding:14px 16px; margin-bottom:10px; font-size:14px; color:#3a3a3a; }
+  .stat-box span { justify-self:start; }
+  .stat-box b { font-size:17px; font-variant-numeric:tabular-nums; justify-self:center; }
+  .stat-box em { font-style:normal; font-size:12px; color:#6b6458; justify-self:end; }
+  .achieve { background:#fff8e1; border:1px solid #ffca28; border-radius:12px; padding:13px 15px; font-size:13px; color:#7a6230; line-height:1.7; margin-top:16px; }
+  .achieve b { color:#f57f17; }
+  .again { margin-top:24px; text-align:center; font-size:14px; font-weight:800; color:#fff; background:#1a1a1a; border-radius:12px; padding:14px 0; cursor:pointer; transition:transform .1s ease; }
+  .again:active { transform:scale(.98); }
+  @keyframes pop { 0% { transform:scale(0); } 70% { transform:scale(1.15); } 100% { transform:scale(1); } }
+
+  .boot { text-align:center; font-size:13px; color:#8a8478; margin-top:12px; line-height:1.7; }
+  .boot .lbl { color:#5a5a5a; font-weight:700; }
+
+  /* ---------- 大图查看模式 ---------- */
+  #screenD { display:none; background:#fff; padding:58px 8px 8px; transition:transform .22s ease, opacity .22s ease; }
+  .d-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .d-close { font-size:15px; color:#6b6458; font-weight:700; cursor:pointer; padding:4px 10px; border-radius:8px; line-height:1; }
+  .d-close:hover { background:#f0ece4; color:#222; }
+  .d-swipe-hint { text-align:center; font-size:10px; color:#b8b2a6; margin-bottom:10px; letter-spacing:.5px; }
+  .d-pos { font-size:12px; color:#6b6458; font-variant-numeric:tabular-nums; }
+  .d-status { font-size:11px; font-weight:800; padding:4px 9px; border-radius:7px; }
+  .d-img { height:400px; border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:88px; margin-bottom:14px; position:relative; }
+  .d-img .besttag { position:absolute; top:10px; left:10px; background:#7c4dff; color:#fff; font-size:11px; font-weight:800; border-radius:5px; padding:3px 7px; }
+  .d-info { text-align:center; font-size:13px; color:#6b6458; margin-bottom:18px; line-height:1.7; }
+  .d-info b { color:#222; }
+  .d-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .d-nav .nv { font-size:24px; color:#7c4dff; cursor:pointer; padding:4px 16px; user-select:none; }
+  .d-nav .nv.off { color:#d8d2c6; cursor:default; }
+  .d-btns { display:flex; gap:10px; }
+  .d-btn { flex:1; padding:14px 0; border-radius:12px; font-size:14px; font-weight:800; text-align:center; cursor:pointer; transition:transform .1s ease; }
+  .d-btn:active { transform:scale(.97); }
+  .d-keep { background:#1a1a1a; color:#fff; }
+  .d-keep.done { background:#2e7d32; }
+  .d-clear { border:1.5px solid #c0392b; color:#c0392b; background:#fff; }
+  .d-clear.done { background:#c0392b; color:#fff; }
+
+  /* ---------- 真实照片导入 ---------- */
+  .import { margin-top:16px; text-align:center; }
+  .imp-btn { display:inline-block; font-size:12px; font-weight:800; color:#7c4dff; border:1.5px solid #cdb8f5; background:#fff; border-radius:9px; padding:7px 14px; cursor:pointer; }
+  .imp-btn:active { background:#f3eefe; }
+  .imp-note { font-size:10px; color:#b8b2a6; margin-top:5px; }
+  .pcard .ph-img { width:100%; height:100%; object-fit:cover; display:block; }
+  .d-img img { max-width:100%; max-height:100%; border-radius:10px; object-fit:contain; }
+</style>
+
+<div class="wrap">
+  <div class="phone">
+    <div class="statusbar">
+      <div class="sb-time">9:41</div>
+      <div class="sb-right"><span>📶</span><span>📡</span><span>🔋</span></div>
+    </div>
+    <div class="island"></div>
+    <div class="screen">
+
+      <!-- 屏 A：iOS 桌面（SnapTidy 小组件嵌入其中，非全屏） -->
+      <div id="screenA">
+        <div class="desk"></div>
+        <div class="grid">
+          <div class="widget" onclick="start()">
+            <div class="reddot">7</div>
+            <div class="w-title">📸 7 组待处理</div>
+            <div class="w-mosaic">
+              <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+              <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+              <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+            </div>
+            <div class="w-cta">▶ 点我开始抽卡</div>
+            <div class="w-stats">📊 今日 120MB · 🔥 连续 3 天</div>
+          </div>
+          <div class="app"><div class="ic">📷</div><div class="lb">相机</div></div>
+          <div class="app"><div class="ic">🖼️</div><div class="lb">照片</div></div>
+          <div class="app"><div class="ic">📅</div><div class="lb">日历</div></div>
+          <div class="app"><div class="ic">🗺️</div><div class="lb">地图</div></div>
+          <div class="app"><div class="ic">📝</div><div class="lb">备忘录</div></div>
+          <div class="app"><div class="ic">🎵</div><div class="lb">音乐</div></div>
+          <div class="app"><div class="ic">⛅</div><div class="lb">天气</div></div>
+          <div class="app"><div class="ic">⏰</div><div class="lb">时钟</div></div>
+          <div class="app"><div class="ic">💰</div><div class="lb">钱包</div></div>
+          <div class="app"><div class="ic">📚</div><div class="lb">图书</div></div>
+          <div class="app"><div class="ic">✏️</div><div class="lb">编辑</div></div>
+          <div class="app"><div class="ic">🎧</div><div class="lb">播客</div></div>
+        </div>
+        <div class="dock">
+          <div class="app"><div class="ic">📞</div><div class="lb">电话</div></div>
+          <div class="app"><div class="ic">💬</div><div class="lb">信息</div></div>
+          <div class="app"><div class="ic">🌐</div><div class="lb">Safari</div></div>
+          <div class="app"><div class="ic">🎮</div><div class="lb">游戏</div></div>
+        </div>
+      </div>
+
+      <!-- 屏 B：抽卡 -->
+      <div id="screenB">
+        <div class="card-top">
+          <div class="ding">✨ DING!</div>
+          <div class="ding-sub">又发现一组相似照片</div>
+        </div>
+        <div class="rarity"><span class="rlabel" id="rlabel"></span></div>
+        <div class="preview" id="preview"></div>
+        <div class="suggestion" id="suggestion"></div>
+        <div class="buttons">
+          <div class="btn btn-yes" onclick="accept()">✅ 采纳</div>
+          <div class="btn btn-skip" onclick="skip()">⏭ 跳过</div>
+        </div>
+        <div class="stats">
+          <span>🔥 连续 <b id="st-days">3</b> 天</span>
+          <span>今日已释放 <b id="st-freed">120</b> MB</span>
+        </div>
+        <div class="import">
+          <label class="imp-btn" for="fileInput">📁 选择真实照片</label>
+          <div class="imp-note" id="imp-note">导入后抽卡用你的照片 · 仅本地预览不上传</div>
+        </div>
+      </div>
+
+      <!-- 真实照片选择（隐藏，真机弹系统相册） -->
+      <input type="file" id="fileInput" accept="image/*" multiple style="display:none" onchange="onImport(event)">
+
+      <!-- 屏 C：结算 -->
+      <div id="screenC">
+        <div class="result">
+          <div class="result-emoji">🎉</div>
+          <div class="result-title">这组处理完啦</div>
+          <div class="result-sub" id="r-sub"></div>
+          <div class="stat-box"><span>今日清理</span><b id="r-cleared">18</b><em>张</em></div>
+          <div class="stat-box"><span>累计释放</span><b id="r-total">34</b><em>MB</em></div>
+          <div class="stat-box"><span>连续天数</span><b id="r-days">3</b><em>天</em></div>
+          <div class="achieve" id="achieve">🏆 成就解锁：<b>「大扫除大师」</b><br>累计清理首满 100 张</div>
+          <div class="again" onclick="again()">🔁 再来一组</div>
+        </div>
+      </div>
+
+      <!-- 屏 D：大图查看 -->
+      <div id="screenD">
+        <div class="d-top">
+          <div class="d-pos" id="d-pos"></div>
+          <div class="d-status" id="d-status"></div>
+          <div class="d-close" onclick="closeDetail()">✕</div>
+        </div>
+        <div class="d-swipe-hint">↓ 下滑返回 · ← → 滑动切换</div>
+        <div class="d-img" id="d-img"></div>
+        <div class="d-info" id="d-info"></div>
+        <div class="d-nav">
+          <div class="nv" id="d-prev" onclick="detailNav(-1)">‹</div>
+          <div class="nv" id="d-next" onclick="detailNav(1)">›</div>
+        </div>
+        <div class="d-btns">
+          <div class="d-btn d-keep" id="d-keep" onclick="detailSet('keep')">✅ 保留</div>
+          <div class="d-btn d-clear" id="d-clear" onclick="detailSet('clear')">🗑 清除</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="homebar"></div>
+  </div>
+  <div class="hint">SnapTidy 交互原型 · iPhone 17 Pro（402×874）· 桌面点小组件进入 · 抽卡屏可导入真实照片（仅本地预览不上传）· 底部上滑退出</div>
+</div>
+
+<script>
+  // ---------- 模拟数据 ----------
+  const RARITIES = [
+    { name:'COMMON', label:'普通', color:'#b8b8b8', text:'#777',  note:'普通：重复 / 模糊多，建议快速扫一眼' },
+    { name:'RARE',   label:'RARE', color:'#7c4dff', text:'#fff',  note:'稀有：值得认真看一眼，系统已有建议' },
+    { name:'EPIC',   label:'EPIC', color:'#e53935', text:'#fff',  note:'史诗：有一批高质量照片，别删错了' },
+    { name:'LEGEND', label:'LEGEND', color:'#ffa000', text:'#3a2a00', note:'传说：罕见组！多花 10 秒慢慢挑' },
+  ];
+  const SCENES = [ {e:'🏖️',bg:'#e8f4f0'}, {e:'🌄',bg:'#fdeed8'}, {e:'🍜',bg:'#fdeee6'}, {e:'🐱',bg:'#e9eef7'}, {e:'🌇',bg:'#f7e6ee'}, {e:'📸',bg:'#eef2e0'} ];
+  const ISSUES = ['模糊','过曝','重复','抖动','雷同'];
+  let group = null, keptTotal = 18, freedTotal = 34.5, days = 3, pulled = 0;
+  let library = []; // 真实照片库 [{objUrl,name,size}]
+
+  // ---------- 导入真实照片 ----------
+  function onImport(e){
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    library.forEach(p=>{ try{ URL.revokeObjectURL(p.objUrl); }catch(_){} });
+    library = files.map(f=>({ objUrl: URL.createObjectURL(f), name:f.name, size:(f.size/1048576).toFixed(1)+'MB' }));
+    document.getElementById('imp-note').textContent =
+      `已导入 ${library.length} 张真实照片 · 抽卡将使用它们`;
+    e.target.value = ''; // 允许下次再选同一批
+    pullFromLibrary();
+  }
+  function pullFromLibrary(){
+    const n = Math.min(4, library.length);
+    const pool = shuffle(library.slice());
+    const r = weightedPick(RARITIES, [0.30, 0.45, 0.20, 0.05]);
+    const cards = [];
+    for (let i=0;i<n;i++){
+      const p = pool[i];
+      cards.push({ idx:i, img:p.objUrl, bg:'#f0efe9', size:p.size, name:p.name,
+        best:i===0, issue:null, decision:null, delay:0.06+i*0.08 });
+    }
+    group = { rarity:r, cards, n, bestIdx:0, scene:null, fromLibrary:true };
+    render();
+  }
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  // ---------- 抽一组 ----------
+  function pull() {
+    if (library.length) return pullFromLibrary(); // 有真实照片就走真实照片
+    const r = weightedPick(RARITIES, [0.30, 0.45, 0.20, 0.05]);
+    const scene = SCENES[Math.floor(Math.random()*SCENES.length)];
+    const n = 4;
+    const best = Math.floor(Math.random()*n);
+    const sizeBase = 2 + Math.random()*3;
+    const cards = [];
+    for (let i=0;i<n;i++){
+      const card = {
+        idx:i, emoji:scene.e, bg:scene.bg,
+        best:i===best,
+        size: (sizeBase + Math.random()*1.6).toFixed(1) + 'MB',
+        issue: (i!==best && Math.random()<0.55) ? ISSUES[Math.floor(Math.random()*ISSUES.length)] : null,
+        decision: null,
+        delay: 0.06 + i*0.08,
+      };
+      cards.push(card);
+    }
+    group = { rarity:r, cards, n, bestIdx:best, scene };
+    render();
+  }
+
+  function weightedPick(arr, w){
+    const tot = w.reduce((a,b)=>a+b,0);
+    let x = Math.random()*tot;
+    for (let i=0;i<arr.length;i++){ x-=w[i]; if (x<=0) return arr[i]; }
+    return arr[arr.length-1];
+  }
+
+  // ---------- 渲染抽卡屏 ----------
+  function render(){
+    const r = group.rarity;
+    const rl = document.getElementById('rlabel');
+    rl.textContent = r.label;
+    rl.style.color = r.text;
+    document.querySelector('.rarity').style.background = r.color;
+
+    const pv = document.getElementById('preview');
+    pv.innerHTML = group.cards.map(c => `
+      <div class="pcard" style="animation-delay:${c.delay}s" onclick="openDetail(${c.idx})" title="点击查看大图">
+        <div class="ph" style="background:${c.bg}">
+          ${c.best ? '<div class="besttag">最佳</div>' : ''}
+          ${c.img ? `<img class="ph-img" src="${c.img}">` : `<span>${c.emoji}</span>`}
+          <div class="num">#${c.idx+1}</div>
+        </div>
+        <div class="pmeta">
+          <span class="sz">${c.size}</span>
+          <span>相似 ${c.idx+1}/${group.n}${c.issue ? `<span class="issue">${c.issue}</span>` : ''}</span>
+        </div>
+      </div>`).join('');
+
+    const issues = group.cards.filter(c=>c.issue).map(c=>`#${c.idx+1} ${c.issue}`);
+    const sug = group.fromLibrary
+      ? `📁 来自你的照片 · 建议保留 <b>#${group.bestIdx+1}</b>`
+      : issues.length
+        ? `💡 建议：保留 <b>#${group.bestIdx+1}</b>（最佳）<br>${issues.join(' · ')}`
+        : `💡 建议：这组都挺不错，保留 <b>#${group.bestIdx+1}</b> 即可`;
+    document.getElementById('suggestion').innerHTML = sug + `　<span style="color:#8a8478">${r.note}</span>`;
+
+    document.getElementById('st-days').textContent = days;
+    document.getElementById('st-freed').textContent = Math.round(freedTotal);
+  }
+
+  // ---------- 流程 ----------
+  function start(){
+    document.getElementById('screenA').style.display='none';
+    document.getElementById('screenB').style.display='block';
+    pull();
+  }
+  function accept(){
+    // 采纳建议：已在大图里决策的按决策算；未决策的采纳系统建议（最佳保留，有问题的清除）
+    let kept = 0, cleared = 0, freedThis = 0;
+    group.cards.forEach((c,i)=>{
+      const decision = c.decision || (i===group.bestIdx ? 'keep' : (c.issue ? 'clear' : 'keep'));
+      if (decision==='keep'){ kept++; }
+      else { cleared++; freedThis += parseFloat(c.size); }
+    });
+    keptTotal += kept;
+    freedTotal += freedThis;
+    pulled++;
+    showResult(`采纳建议 · 保留 ${kept} 张 · 清除 ${cleared} 张 · 释放 ${freedThis.toFixed(1)}MB`, freedThis);
+  }
+
+  // ---------- 大图查看模式 ----------
+  let detailIdx = 0;
+  function openDetail(idx){
+    detailIdx = idx;
+    const d = document.getElementById('screenD');
+    d.style.display='block';
+    d.style.transform=''; d.style.opacity=''; d.style.transition='';
+    document.getElementById('screenB').style.display='none';
+    renderDetail();
+  }
+  function closeDetail(){
+    const d = document.getElementById('screenD');
+    d.style.display='none';
+    d.style.transform=''; d.style.opacity=''; d.style.transition='';
+    document.getElementById('screenB').style.display='block';
+    render(); // 刷新抽卡屏卡片状态
+  }
+  function detailNav(dir){
+    const next = detailIdx + dir;
+    if (next < 0 || next >= group.n) return;
+    detailIdx = next;
+    renderDetail();
+  }
+  function renderDetail(){
+    const c = group.cards[detailIdx];
+    document.getElementById('d-pos').textContent = `${detailIdx+1} / ${group.n}`;
+    const img = document.getElementById('d-img');
+    img.style.background = c.bg;
+    img.innerHTML = `${c.best ? '<div class="besttag">最佳</div>' : ''}${c.img ? `<img src="${c.img}">` : `<span>${c.emoji}</span>`}`;
+    document.getElementById('d-info').innerHTML =
+      `文件大小 <b>${c.size}</b> · 相似组 <b>${detailIdx+1}/${group.n}</b>` +
+      (c.issue ? ` · <b style="color:#c0392b">${c.issue}</b>` : '') +
+      (c.best ? ` · <b style="color:#7c4dff">最佳</b>` : '');
+    const st = document.getElementById('d-status');
+    if (c.decision==='keep'){ st.textContent='已保留'; st.style.background='#e8f5e9'; st.style.color='#2e7d32'; }
+    else if (c.decision==='clear'){ st.textContent='已清除'; st.style.background='#fdecea'; st.style.color='#c0392b'; }
+    else { st.textContent='待定'; st.style.background='#f0ece4'; st.style.color='#8a8478'; }
+    document.getElementById('d-keep').classList.toggle('done', c.decision==='keep');
+    document.getElementById('d-clear').classList.toggle('done', c.decision==='clear');
+    document.getElementById('d-prev').classList.toggle('off', detailIdx===0);
+    document.getElementById('d-next').classList.toggle('off', detailIdx===group.n-1);
+  }
+  function detailSet(d){
+    const c = group.cards[detailIdx];
+    c.decision = (c.decision===d) ? null : d; // 再点一次撤销
+    renderDetail();
+    if (c.decision){ // 决策后自动进下一张
+      if (detailIdx < group.n - 1){
+        setTimeout(()=>{ detailNav(1); }, 160);
+      } else { // 组内最后一张决策完 → 自动回抽卡屏
+        setTimeout(()=>{ closeDetail(); }, 320);
+      }
+    }
+  }
+  function skip(){
+    pulled++;
+    showResult('跳过这组 · 先不动它们', 0);
+  }
+  function showResult(sub, freedThis){
+    document.getElementById('screenB').style.display='none';
+    document.getElementById('screenC').style.display='block';
+    document.getElementById('r-sub').textContent = sub;
+    document.getElementById('r-cleared').textContent = keptTotal;
+    document.getElementById('r-total').textContent = Math.round(freedTotal); // 单位 MB 固定
+    document.getElementById('r-days').textContent = days;
+    // 成就：偶尔解锁新称号
+    const ach = document.getElementById('achieve');
+    const rand = Math.random();
+    if (rand < 0.35){
+      ach.innerHTML = '🏆 成就解锁：<b>「流水线快手」</b><br>单日清理超过 5 组';
+    } else if (rand < 0.7){
+      ach.innerHTML = '🏆 成就解锁：<b>「断舍离入门」</b><br>累计释放首个 500MB';
+    } else {
+      ach.innerHTML = '🏆 成就解锁：<b>「大扫除大师」</b><br>累计清理首满 100 张';
+    }
+  }
+  function again(){
+    document.getElementById('screenC').style.display='none';
+    document.getElementById('screenB').style.display='block';
+    pull();
+  }
+
+  // ---------- 大图模式手势：下滑返回 + 左右滑动切换 ----------
+  const D = document.getElementById('screenD');
+  let g = { on:false, axis:'', sx:0, sy:0, dx:0, dy:0, t:null };
+
+  function gStart(e){
+    if (g.t) clearTimeout(g.t);
+    const p = e.touches ? e.touches[0] : e;
+    g = { on:true, axis:'', sx:p.clientX, sy:p.clientY, dx:0, dy:0, t:null };
+  }
+  function gMove(e){
+    if (!g.on) return;
+    const p = e.touches ? e.touches[0] : e;
+    g.dx = p.clientX - g.sx; g.dy = p.clientY - g.sy;
+    if (!g.axis){
+      if (Math.abs(g.dx) < 6 && Math.abs(g.dy) < 6) return;        // 未出判定区，等手势确立
+      g.axis = Math.abs(g.dy) > Math.abs(g.dx) ? 'v' : 'h';
+      if (g.axis==='v' && g.dy < 0) g.axis = 'none';               // 上滑不响应
+      if (g.axis==='none') return;
+      D.style.transition = 'none';                                 // 拖拽跟手，先关动画
+    }
+    if (g.axis==='v'){
+      if (g.dy <= 0) return;
+      D.style.transform = 'translateY('+g.dy+'px)';
+      D.style.opacity = Math.max(0, 1 - g.dy/780).toFixed(2);      // 下滑渐隐
+    } else {
+      const lim = 90;                                              // 左右边缘阻尼
+      const off = g.dx>0 ? Math.min(g.dx,lim) : Math.max(g.dx,-lim);
+      D.style.transform = 'translateX('+off+'px)';
+    }
+    if (e.cancelable) e.preventDefault();
+  }
+  function gEnd(){
+    if (!g.on) return;
+    const dx = g.dx, dy = g.dy, axis = g.axis;
+    g.on = false;
+    if (axis==='v'){
+      if (dy > 90){                                                // 超过阈值 → 下滑返回
+        document.getElementById('screenB').style.display='block';  // 提前露出抽卡屏
+        render();
+        D.style.transition = 'transform .18s ease, opacity .18s ease';
+        D.style.transform = 'translateY(720px)';
+        D.style.opacity = '0';
+        g.t = setTimeout(()=>{ closeDetail(); }, 180);
+      } else {                                                     // 未过阈值 → 弹回
+        D.style.transition = '';
+        D.style.transform = ''; D.style.opacity = '';
+      }
+    } else if (axis==='h'){
+      if (Math.abs(dx) > 60){                                      // 超过阈值 → 切一张
+        const dir = dx > 0 ? -1 : 1;
+        D.style.transition = 'transform .16s ease';
+        D.style.transform = 'translateX('+(dir*160)+'px)';
+        g.t = setTimeout(()=>{ detailNav(dir); D.style.transform=''; D.style.transition=''; }, 160);
+      } else {                                                     // 未过阈值 → 弹回
+        D.style.transition = '';
+        D.style.transform = '';
+      }
+    }
+  }
+
+  D.addEventListener('touchstart', gStart, {passive:true});
+  D.addEventListener('touchmove', gMove, {passive:false});
+  D.addEventListener('touchend', gEnd);
+  D.addEventListener('mousedown', gStart);
+  document.addEventListener('mousemove', e=>{ if (g.on && e.buttons) gMove(e); });
+  document.addEventListener('mouseup', gEnd);
+
+  // ---------- 抽卡屏：底部上滑退出会话（模拟 iOS 退 App 回桌面） ----------
+  const PHONE = document.querySelector('.phone');
+  let u = { on:false, sy:0, dy:0 };
+  function uStart(e){
+    const p = e.touches ? e.touches[0] : e;
+    u = { on:true, sy:p.clientY, dy:0 };
+  }
+  function uMove(e){
+    if (!u.on) return;
+    if (document.getElementById('screenB').style.display !== 'block'){ u.on=false; return; } // 仅抽卡屏生效
+    const p = e.touches ? e.touches[0] : e;
+    u.dy = p.clientY - u.sy;
+    if (Math.abs(u.dy) < 6) return;
+    if (u.dy > 0) return;                                        // 只响应上滑
+    const b = document.getElementById('screenB');
+    b.style.transition = 'none';
+    b.style.transform = 'translateY('+u.dy+'px)';
+    b.style.opacity = Math.max(0, 1 + u.dy/780).toFixed(2);      // 上滑渐隐
+    if (e.cancelable) e.preventDefault();
+  }
+  function uEnd(){
+    if (!u.on) return;
+    const dy = u.dy; u.on = false;
+    const b = document.getElementById('screenB');
+    if (dy < -80){                                               // 超过阈值 → 退出会话
+      b.style.transition = 'transform .22s ease, opacity .22s ease';
+      b.style.transform = 'translateY(-760px)';
+      b.style.opacity = '0';
+      setTimeout(()=>{ quitSession(); }, 220);
+    } else {                                                     // 未过阈值 → 弹回
+      b.style.transition = '';
+      b.style.transform = ''; b.style.opacity = '';
+    }
+  }
+  PHONE.addEventListener('touchstart', uStart, {passive:true});
+  PHONE.addEventListener('touchmove', uMove, {passive:false});
+  PHONE.addEventListener('touchend', uEnd);
+  PHONE.addEventListener('mousedown', uStart);
+  document.addEventListener('mousemove', e=>{ if (u.on && e.buttons) uMove(e); });
+  document.addEventListener('mouseup', uEnd);
+
+  function quitSession(){
+    const b = document.getElementById('screenB');
+    b.style.display='none';
+    b.style.transform=''; b.style.opacity=''; b.style.transition='';
+    document.getElementById('screenA').style.display='block';
+  }
+</script>
