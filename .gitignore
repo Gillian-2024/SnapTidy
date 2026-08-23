@@ -27,3 +27,7 @@ snap_tidy/tests/validation/hdbscan/test_hdbscan_images/*.jpeg
 
 # Agent workspace memory (not a deliverable)
 memory/
+
+# Swift / SwiftPM build artifacts
+.build/
+.swiftpm/
